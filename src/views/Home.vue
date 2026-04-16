@@ -247,8 +247,6 @@ import { JsonRpc, RpcError } from 'enf-eosjs';
 
 
 import { getAccount, fetchBalance, getContract, fetchFeeData, sendTransaction, getPublicClient, getWalletClient, fetchTransaction, waitForTransaction, writeContract, disconnect, watchAccount, watchNetwork, switchNetwork, getNetwork } from '@wagmi/core'
-import { compileScript } from 'vue/compiler-sfc';
-
 
 
 export default {
@@ -462,11 +460,47 @@ export default {
     blockList() { return this.tokenList[this.selectedToken].blockList; },
     warningList() { return this.tokenList[this.selectedToken].warningList; },
 
+    async fetchAllTableRows(params) {
+      const pageLimit = Math.min(params.limit != null ? params.limit : 500, 1000)
+      const base = {
+        table: params.table,
+        scope: params.scope,
+        code: params.code,
+      }
+      const rows = []
+      let lowerBound
+      let more = true
+      for (let page = 0; page < 100 && more; page++) {
+        const body = {
+          ...base,
+          json: true,
+          limit: pageLimit,
+        }
+        if (lowerBound !== undefined && lowerBound !== null && lowerBound !== '') {
+          body.lower_bound = lowerBound
+        }
+        const res = await this.rpc.fetch('/v1/chain/get_table_rows', body)
+        const chunk = res.rows || []
+        rows.push(...chunk)
+        more = !!res.more
+        lowerBound = res.next_key
+        if (!chunk.length) {
+          break
+        }
+      }
+      return rows
+    },
+
     async prepareList(tokenListTemplate) {
       // Make a deep clone
       let tokenList = JSON.parse(JSON.stringify(tokenListTemplate))
 
-      const erclist = (await this.rpc.fetch('/v1/chain/get_table_rows', { "table": "tokens", "scope": "eosio.erc2o", "code": "eosio.erc2o", "json": true, "limit": 20 })).rows
+      const erclist = await this.fetchAllTableRows({
+        table: 'tokens',
+        scope: 'eosio.erc2o',
+        code: 'eosio.erc2o',
+        limit: 500,
+      })
       for(let erc of erclist) {
         let fee = erc.ingress_fee.split(' ')
 
